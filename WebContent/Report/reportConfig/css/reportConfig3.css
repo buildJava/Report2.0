@@ -1,0 +1,22 @@
+.db_table_list_box {
+	width: 250px;
+	max-height: 100px;
+	margin: 0px;
+	border: 1px solid #ccc;
+	background: #fff;
+	overflow: auto;
+	z-index: 999;
+	position: absolute;
+	margin-top: -1px;
+}
+
+.db_table_list_ul li {
+	line-height: 25px;
+	padding: 0px 5px;
+	cursor: pointer;
+}
+
+.db_table_list_ul li:hover {
+	background: #337AB7;
+	color: #fff;
+}

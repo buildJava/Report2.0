@@ -1,0 +1,70 @@
+@font-face {
+    font-family: 'EuropeRegular';
+    src: url('font/eur_____-webfont.eot');
+    src: url('font/eur_____-webfont.eot?#iefix') format('embedded-opentype'),
+         url('font/eur_____-webfont.woff') format('woff'),
+         url('font/eur_____-webfont.ttf') format('truetype'),
+         url('font/eur_____-webfont.svg#EuropeRegular') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'EuropeBold';
+    src: url('font/eur____b.eot');
+    src: url('font/eur____b.eot?#iefix') format('embedded-opentype'),
+         url('font/eur____b.woff') format('woff'),
+         url('font/eur____b.ttf') format('truetype'),
+         url('font/eur____b.svg#EuropeBold') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'EuropeItalic';
+    src: url('font/eur____o.eot');
+    src: url('font/eur____o.eot?#iefix') format('embedded-opentype'),
+         url('font/eur____o.woff') format('woff'),
+         url('font/eur____o.ttf') format('truetype'),
+         url('font/eur____o.svg#EuropeItalic') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'EuropeBoldItalic';
+    src: url('font/eur___bo.eot');
+    src: url('font/eur___bo.eot?#iefix') format('embedded-opentype'),
+         url('font/eur___bo.woff') format('woff'),
+         url('font/eur___bo.ttf') format('truetype'),
+         url('font/eur___bo.svg#EuropeBoldItalic') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'EuropeDemiRegular';
+    src: url('font/eur___dm.eot');
+    src: url('font/eur___dm.eot?#iefix') format('embedded-opentype'),
+         url('font/eur___dm.woff') format('woff'),
+         url('font/eur___dm.ttf') format('truetype'),
+         url('font/eur___dm.svg#EuropeDemiRegular') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'EuropeDemiItalic';
+    src: url('font/eur__dmo.eot');
+    src: url('font/eur__dmo.eot?#iefix') format('embedded-opentype'),
+         url('font/eur__dmo.woff') format('woff'),
+         url('font/eur__dmo.ttf') format('truetype'),
+         url('font/eur__dmo.svg#EuropeDemiItalic') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'BebasNeueRegular';
+    src: url('font/BebasNeue-webfont.eot');
+    src: url('font/BebasNeue-webfont.eot?#iefix') format('embedded-opentype'),
+         url('font/BebasNeue-webfont.woff') format('woff'),
+         url('font/BebasNeue-webfont.ttf') format('truetype'),
+         url('font/BebasNeue-webfont.svg#BebasNeueRegular') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}

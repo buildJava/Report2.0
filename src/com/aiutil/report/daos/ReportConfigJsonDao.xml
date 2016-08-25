@@ -1,0 +1,874 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiutil.report.daos.ReportConfigJsonDao">
+	
+	<!-- 根据SQL动态查询 -->
+	<select id="qryDataListDao" parameterType="map" resultType="java.util.HashMap">
+		${sql}
+	</select>
+	<!-- 查询数据库表名-->
+	<select id="qryDbTableNameDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.OWNER, T.TABLE_NAME, T.TABLESPACE_NAME
+		  FROM RPT_DB_TABLES T
+		 WHERE T.OWNER = #{owner}
+		   AND T.TABLE_NAME LIKE '%${tableName}%'
+		 ORDER BY T.TABLE_NAME
+	</select>
+	
+	<!-- 保存报表元数据 -->
+	<insert id="saveTableInfoDao" parameterType="map">
+		INSERT INTO RPT_TABLE_INFO
+		(
+		    TB_ID, 
+			TB_NAME, 
+			TB_DESC, 
+			TB_OWNER, 
+			TB_CODE, 
+			SPLIT_FLAG, 
+			SPLIT_CODE, 
+			TB_STATUS, 
+			CREATER_NAME, 
+			CREATE_DATE, 
+			UPDATE_DATE
+		)VALUES
+		(
+		    #{tbId},
+		    #{tbName},
+		    #{tbDesc},
+		    #{tbOwner},
+		    #{tbCode},
+		    #{splitFlag},
+		    #{splitCode},
+		    '1',
+		    NULL,
+		    SYSDATE,
+		    NULL
+		)
+	</insert>
+	
+	<!-- 保存报表字段列表数据 -->
+	<insert id="insertTableFieldDao" parameterType="map">
+		INSERT INTO RPT_TABLE_FIELD
+		(
+		    FIELD_ID, 
+		    TB_ID, 
+		    FIELD_CODE, 
+		    FIELD_NAME, 
+		    FIELD_TYPE,
+		    FIELD_LENGTH,
+		    DISPLAY_ORDER, 
+		    IS_FIXED, 
+		    FIELD_STATUS, 
+		    IS_DIM, 
+		    GROUP_VALUE
+		)
+		SELECT #{tbId}||S.COLUMN_ORDER,
+		       #{tbId},
+		       S.COLUMN_NAME,
+		       S.COMMENTS,
+		       S.DATA_TYPE,
+		       S.DATA_LENGTH,
+		       S.COLUMN_ORDER,
+		       '0',
+		       '1',
+	           CASE WHEN (S.COLUMN_NAME LIKE '%CNT%'
+	                  OR S.COLUMN_NAME LIKE '%COUNT%'
+	                  OR S.COLUMN_NAME LIKE '%VALUE%'
+	                  OR S.COLUMN_NAME LIKE '%VAL%'
+	                  OR S.COLUMN_NAME LIKE '%RATE%'
+	                  OR S.COLUMN_NAME LIKE '%FEE%'
+	                  OR (S.DATA_TYPE LIKE '%NUMBER%' AND S.COMMENTS NOT LIKE '%编码%'))
+	                 AND S.COLUMN_NAME NOT LIKE '%ID%'
+	                 AND S.COLUMN_NAME NOT LIKE '%CODE%'
+	                 AND S.COLUMN_NAME NOT LIKE '%NAME%'
+	                 AND S.COLUMN_NAME NOT IN ('DEAL_MON', 'DEAL_DATE')
+	                THEN '0'
+	                ELSE '1'
+	            END IS_DIM,
+		       NULL
+		  FROM RPT_TABLE_INFO T, RPT_DB_TABLE_COLUMNS S
+		 WHERE T.TB_OWNER = S.OWNER
+		   AND T.TB_CODE = S.TABLE_NAME
+		   AND T.TB_ID = #{tbId}
+	</insert>
+	<!-- 使用旧的元数据更新新的元数据 -->
+	<update id="mergeTableFieldDao" parameterType="map">
+		MERGE INTO RPT_TABLE_FIELD T
+		USING RPT_TABLE_FIELD S
+		ON (T.TB_ID = #{tbId} AND S.TB_ID = #{tbId} AND T.FIELD_STATUS = '1' AND S.FIELD_STATUS = '0' AND T.FIELD_CODE = S.FIELD_CODE)
+		WHEN MATCHED THEN
+		  UPDATE SET T.IS_DIM = S.IS_DIM, T.GROUP_VALUE = S.GROUP_VALUE
+	</update>
+	<!-- 更新报表字段列表数据 -->
+	<delete id="deleteTableFieldDao" parameterType="map">
+		DELETE FROM RPT_TABLE_FIELD T WHERE T.TB_ID = #{tbId} AND T.FIELD_STATUS = '0'
+	</delete>
+	<!-- 查询报表元数据列表 -->
+	<select id="qryTableInfoDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT T.TB_ID,
+				       T.TB_NAME,
+				       T.TB_DESC,
+				       T.TB_OWNER,
+				       T.TB_CODE,
+				       DECODE(T.SPLIT_FLAG, '1', '是', '0', '否') SPLIT_FLAG,
+				       NVL(T.SPLIT_CODE, '—') SPLIT_CODE,
+				       T.TB_STATUS,
+				       NVL(T.CREATER_NAME, 'admin') CREATER_NAME,
+				       TO_CHAR(T.CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') CREATE_DATE,
+				       TO_CHAR(NVL(T.UPDATE_DATE, T.CREATE_DATE), 'YYYY-MM-DD HH24:MI:SS') UPDATE_DATE
+				  FROM RPT_TABLE_INFO T
+				 WHERE T.TB_OWNER = #{tbOwner}
+			       AND T.TB_STATUS = '1'
+				 <if test="tbName != null and tbName != ''">
+				   AND T.TB_NAME LIKE '%${tbName}%'
+				 </if>
+				 <if test="tbCode != null and tbCode != ''">
+				   AND T.TB_CODE LIKE '%${tbCode}%'
+				 </if>
+				 <if test="fieldName != null and fieldName != ''">
+                   AND T.TB_ID IN
+                       (SELECT DISTINCT T.TB_ID
+                          FROM RPT_TABLE_FIELD T
+                         WHERE (T.FIELD_NAME LIKE '%${fieldName}%' OR T.FIELD_CODE LIKE UPPER('%${fieldName}%')))
+				 </if>
+				 ORDER BY T.TB_ID ) T) T
+		 WHERE T.RN <![CDATA[>=]]> #{startIndex}
+		   AND T.RN <![CDATA[<=]]> #{endIndex}
+	</select>
+	
+	<select id="qryTableInfoCountDao" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			SELECT T.TB_ID,
+			       T.TB_NAME,
+			       T.TB_DESC,
+			       T.TB_OWNER,
+			       T.TB_CODE,
+			       DECODE(T.SPLIT_FLAG, '1', '是', '0', '否') SPLIT_FLAG,
+			       T.SPLIT_CODE,
+			       T.TB_STATUS,
+			       T.CREATER_NAME,
+			       T.CREATE_DATE,
+			       NVL(T.UPDATE_DATE, T.CREATE_DATE) UPDATE_DATE
+			  FROM RPT_TABLE_INFO T
+			 WHERE T.TB_OWNER = #{tbOwner}
+		       AND T.TB_STATUS = '1'
+			 <if test="tbName != null and tbName != ''">
+			   AND T.TB_NAME LIKE '%${tbName}%'
+			 </if>
+			 <if test="tbCode != null and tbCode != ''">
+			   AND T.TB_CODE LIKE '%${tbCode}%'
+			 </if>
+			 <if test="fieldName != null and fieldName != ''">
+                  AND T.TB_ID IN
+                      (SELECT DISTINCT T.TB_ID
+                         FROM RPT_TABLE_FIELD T
+                        WHERE T.FIELD_NAME LIKE '%${fieldName}%')
+			 </if>
+			   ) T
+	</select>
+	<!-- 根据id删除报表元数据 -->
+	<update id="deleteTableInfoDao" parameterType="map">
+		UPDATE RPT_TABLE_INFO T SET T.TB_STATUS = 0 WHERE T.TB_ID = #{tbId}
+	</update>
+	
+	<!-- 根据元数据ID查看字段列表 -->
+	<select id="qryTableFieldByIdDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT T.FIELD_ID,
+				       T.TB_ID,
+				       T.FIELD_CODE,
+				       T.FIELD_NAME,
+				       T.FIELD_TYPE,
+				       T.FIELD_LENGTH,
+				       T.DISPLAY_ORDER,
+				       T.IS_FIXED,
+				       T.FIELD_STATUS,
+				       DECODE(T.IS_DIM, '1', '是', '0', '否') IS_DIM,
+				       NVL(T.GROUP_VALUE, '—') GROUP_VALUE
+				  FROM RPT_TABLE_FIELD T
+				 WHERE T.TB_ID = #{tbId}
+				   AND T.FIELD_STATUS = '1'
+				 ORDER BY T.TB_ID, TO_NUMBER(T.FIELD_ID)) T) T
+		 WHERE T.RN <![CDATA[>=]]> #{startIndex}
+		   AND T.RN <![CDATA[<=]]> #{endIndex}
+	</select>
+	<!-- 查询元数据字段列表记录数 -->
+	<select id="qryTableFieldCountByIdDao" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			SELECT T.FIELD_ID,
+			       T.TB_ID,
+			       T.FIELD_CODE,
+			       T.FIELD_NAME,
+			       T.FIELD_TYPE,
+			       T.FIELD_LENGTH,
+			       T.DISPLAY_ORDER,
+			       T.IS_FIXED,
+			       T.FIELD_STATUS,
+			       DECODE(T.IS_DIM, '1', '是', '0', '否') IS_DIM,
+			       T.GROUP_VALUE
+			  FROM RPT_TABLE_FIELD T
+			 WHERE T.TB_ID = #{tbId}
+			   AND T.FIELD_STATUS = '1' ) T
+	</select>
+	<!-- 查询元数据字段列表记录数 -->
+	<select id="qryTableFieldByCodeDao" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			SELECT *
+			  FROM RPT_TABLE_FIELD T
+			 WHERE T.TB_ID = #{tbId}
+			   AND T.FIELD_CODE = #{fieldCode} ) T
+	</select>
+	<!-- 根据元数据字段ID删除字段 -->
+	<update id="updateTableFieldDao" parameterType="map">
+		UPDATE RPT_TABLE_FIELD T SET T.FIELD_STATUS = 0
+         WHERE T.TB_ID = #{tbId}
+         <if test="fieldId != null">
+           AND T.FIELD_ID = #{fieldId}
+         </if>
+	</update>
+	<!-- 展示元数据字段详细信息 -->
+	<select id="openTableFieldDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.FIELD_ID,
+		       T.TB_ID,
+		       T.FIELD_CODE,
+		       T.FIELD_NAME,
+		       T.FIELD_TYPE,
+		       T.FIELD_LENGTH,
+		       T.DISPLAY_ORDER,
+		       T.IS_FIXED,
+		       T.FIELD_STATUS,
+		       T.IS_DIM,
+		       T.GROUP_VALUE
+		  FROM RPT_TABLE_FIELD T
+		 WHERE T.FIELD_STATUS = '1'
+		   AND T.FIELD_ID = #{fieldId}
+	</select>
+	<!-- 保存新增的元数据字段 -->
+	<insert id="addTableFieldDao" parameterType="map">
+		INSERT INTO RPT_TABLE_FIELD
+		(
+		    FIELD_ID, 
+		    TB_ID, 
+		    FIELD_CODE, 
+		    FIELD_NAME, 
+		    FIELD_TYPE,
+		    FIELD_LENGTH,
+		    DISPLAY_ORDER, 
+		    IS_FIXED, 
+		    FIELD_STATUS, 
+		    IS_DIM, 
+		    GROUP_VALUE
+		)VALUES
+		(
+			#{fieldId},
+			#{tbId},
+			#{fieldCode},
+			#{fieldName},
+			#{fieldType},
+			#{fieldLength},
+			#{displayOrder},
+			'1',
+			'1',
+			#{isDim},
+			#{groupValue}
+		)
+	</insert>
+	<!-- 修改元数据字段信息 -->
+	<update id="modifyTableFieldDao" parameterType="map">
+		UPDATE RPT_TABLE_FIELD T
+		   SET T.FIELD_CODE = #{fieldCode},
+		       T.FIELD_NAME = #{fieldName},
+		       T.FIELD_TYPE = #{fieldType},
+		       T.FIELD_LENGTH = #{fieldLength},
+		       T.DISPLAY_ORDER = #{displayOrder},
+		       T.IS_DIM = #{isDim},
+		       T.GROUP_VALUE = #{groupValue}
+		 WHERE T.FIELD_ID = #{fieldId}
+		   AND T.TB_ID = #{tbId}
+	</update>
+	<!-- 查询报表配置信息 -->
+	<select id="qryReportInfoDao" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT T.RPT_ID, 
+					   T.RPT_NAME, 
+					   T.RPT_DESC, 
+					   DECODE(T.RPT_STATUS, '1', '有效', '0', '失效') RPT_STATUS,
+					   T.CREATER_NAME,
+					   TO_CHAR(T.CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') CREATE_DATE,
+				       TO_CHAR(NVL(T.UPDATE_DATE, T.CREATE_DATE), 'YYYY-MM-DD HH24:MI:SS') UPDATE_DATE,
+				       T.RPT_TYPE,
+				       R.CODE_NAME RPT_TYPE_DESC,
+					   DECODE(T.IF_DOWNLOAD, '1', '是', '0', '否') IF_DOWNLOAD,
+					   T.RPT_CYCLE,
+					   S.CODE_NAME RPT_CYCLE_DESC
+				  FROM RPT_REPORT_INFO T, RPT_SYS_CODE S, RPT_SYS_CODE R
+				 WHERE S.CODE_TYPE_ID = 'RPT_CYCLE'
+				   AND T.RPT_CYCLE = S.CODE_ID
+				   AND T.RPT_TYPE = R.CODE_ID
+				   AND R.CODE_TYPE_ID = 'RPT_TYPE'
+				 ORDER BY T.RPT_ID) T) T
+	</select>
+	<!-- 查询控件信息 -->
+	<select id="qryConditionDao" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT T.CDT_ID,
+					   T.CDT_CODE,
+				       T.CDT_NAME,
+				       T.CDT_DESC,
+				       T.CDT_SHOW_TYPE,
+       				   A.CODE_NAME CDT_SHOW_DESC,
+				       T.CDT_SQL,
+				       T.CDT_CAL_TYPE,
+				       B.CODE_NAME CDT_CAL_DESC,
+				       T.PAT_CDT_ID,
+				       NVL(S.CDT_CODE, '—') PAT_CDT_CODE,
+				       NVL(S.CDT_NAME, '—') PAT_CDT_NAME,
+				       S.CDT_DESC      PAT_CDT_DESC,
+				       S.CDT_SHOW_TYPE PAT_CDT_SHOW_TYPE,
+				       S.CDT_SQL       PAT_CDT_SQL,
+				       S.CDT_CAL_TYPE  PAT_CDT_CAL_TYPE,
+				       T.PAT_COL_CODE
+				  FROM RPT_CONDITION_INFO T, RPT_CONDITION_INFO S, RPT_SYS_CODE A, RPT_SYS_CODE B
+				 WHERE T.CDT_SHOW_TYPE = A.CODE_ID
+				   AND T.PAT_CDT_ID = S.CDT_ID(+)
+				   AND A.CODE_TYPE_ID = 'CDT_SHOW_TYPE'
+				   AND T.CDT_STATUS = '1'
+				   AND S.CDT_STATUS(+) = '1'
+				   AND T.CDT_CAL_TYPE = B.CODE_ID
+				   AND B.CODE_TYPE_ID = 'CDT_CAL_TYPE'
+				 ORDER BY T.CDT_ID) T) T
+	</select>
+	<!-- 保存控件信息 -->
+	<insert id="saveConditionDao" parameterType="map">
+		INSERT INTO RPT_CONDITION_INFO
+		(
+		    CDT_ID, 
+		    CDT_CODE,
+		    CDT_NAME, 
+		    CDT_DESC, 
+		    CDT_SHOW_TYPE, 
+		    CDT_SQL, 
+		    PAT_CDT_ID, 
+		    PAT_COL_CODE, 
+		    CDT_STATUS,
+		    CDT_CAL_TYPE
+		)
+		VALUES
+		(
+		    #{cdtId},
+		    #{cdtCode},
+		    #{cdtName},
+		    #{cdtDesc},
+		    #{cdtShowType},
+		    #{cdtSql},
+		    #{patCdtId},
+		    #{patColCode},
+		    '1',
+		    #{cdtCalType}
+		)
+	</insert>
+	<!-- 更新插件信息 -->
+	<update id="updateConditionDao" parameterType="map">
+		UPDATE RPT_CONDITION_INFO T
+		   SET T.CDT_CODE = #{cdtCode},
+		       T.CDT_NAME = #{cdtName},
+		       T.CDT_DESC = #{cdtDesc},
+		       T.CDT_SHOW_TYPE = #{cdtShowType},
+		       T.CDT_SQL = #{cdtSql},
+		       T.PAT_CDT_ID = #{patCdtId},
+		       T.PAT_COL_CODE = #{patColCode},
+		       T.CDT_CAL_TYPE = #{cdtCalType}
+		 WHERE T.CDT_ID = #{cdtId}
+	</update>
+	<!-- 删除插件信息 -->
+	<delete id="deleteConditionDao" parameterType="map">
+		UPDATE RPT_CONDITION_INFO T
+		   SET T.CDT_STATUS = '0'
+		 WHERE T.CDT_ID = #{cdtId}
+	</delete>
+	<!-- 根据输入的内容模糊查询报表元数据 -->
+	<select id="qryTableInfoByInputDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.TB_ID, T.TB_NAME, T.TB_DESC, T.TB_OWNER, T.TB_CODE
+		  FROM RPT_TABLE_INFO T
+		 WHERE (T.TB_NAME LIKE '%${inputVal}%' OR T.TB_CODE LIKE '%${inputVal}%')
+		   AND T.TB_STATUS = '1'
+	</select>
+	<!-- 查询报表元数据的字段列表 -->
+	<select id="qryTableFieldByTbIdDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.FIELD_ID,
+		       T.TB_ID,
+		       T.FIELD_CODE,
+		       T.FIELD_NAME,
+		       T.FIELD_TYPE,
+		       T.FIELD_LENGTH,
+		       T.DISPLAY_ORDER,
+		       T.IS_FIXED,
+		       T.FIELD_STATUS,
+		       T.IS_DIM,
+		       T.GROUP_VALUE
+		  FROM RPT_TABLE_FIELD T
+		 WHERE T.TB_ID = #{tbId}
+		 ORDER BY T.DISPLAY_ORDER
+	</select>
+	<!-- 保存报表配置信息 -->
+	<insert id="saveReportInfoDao" parameterType="map">
+		INSERT INTO RPT_REPORT_INFO
+		(
+		    RPT_ID, 
+		    RPT_NAME, 
+		    RPT_DESC, 
+		    TB_ID, 
+		    RPT_STATUS, 
+		    CREATER_NAME, 
+		    CREATE_DATE, 
+		    UPDATE_DATE, 
+		    RPT_TYPE,
+		    IF_DOWNLOAD,
+		    RPT_CYCLE
+		)
+		VALUES
+		(
+		    #{rptId},
+		    #{rptName},
+		    #{rptDesc},
+		    #{tbId},
+		    '1',
+		    'admin',
+		    SYSDATE,
+		    NULL,
+		    #{rptType},
+		    #{ifDownload},
+		    #{rptCycle}
+		)
+	</insert>
+	<!-- 报表查询条件配置 -->
+	<insert id="saveReportConditionDao" parameterType="map">
+		INSERT INTO RPT_REPORT_CONDITION
+		(
+		    RPT_ID, 
+		    FIELD_CODE, 
+		    FILED_NAME, 
+		    CDT_ORDER, 
+		    CDT_ID, 
+		    CDT_SHOW_TYPE, 
+		    CDT_CAL_TYPE, 
+		    DEFAULT_VAL
+		)
+		VALUES
+		(
+		    #{rptId},
+		    #{fieldCode},
+		    #{fieldName},
+		    #{cdtOrder},
+		    #{cdtId},
+		    #{cdtShowType},
+		    #{cdtCalType},
+		    #{defaultVal}
+		)
+	</insert>
+	<!-- 保存报表的字段信息 -->
+	<insert id="saveReportFieldDao" parameterType="map">
+		INSERT INTO RPT_REPORT_FIELD
+		(
+		    RPT_ID, 
+		    FIELD_ID, 
+		    FIELD_CODE, 
+		    FIELD_NAME, 
+		    DISPLAY_ORDER, 
+		    IS_FIXED, 
+		    IS_DIM, 
+		    IS_ORDER_COL, 
+		    GROUP_VALUE,
+		    IS_SHOW
+		)
+		SELECT #{rptId},
+		       T.FIELD_ID,
+		       T.FIELD_CODE,
+		       T.FIELD_NAME,
+		       T.DISPLAY_ORDER,
+		       T.IS_FIXED,
+		       T.IS_DIM,
+		     <choose>
+		       <when test="orderFieldList != null and orderFieldList.length != 0">
+		       	   CASE WHEN T.FIELD_ID IN 	
+			       <foreach collection="orderFieldList" item="orderField" open="(" separator="," close=")">
+			       		#{orderField}
+			       </foreach>
+			       THEN '1' ELSE '0' END,
+		       </when>
+		       <otherwise>
+		       		'0',
+		       </otherwise>
+		     </choose>
+		       T.GROUP_VALUE,
+		       '1'
+		  FROM RPT_TABLE_FIELD T
+		 WHERE T.TB_ID = #{tbId}
+		   AND T.FIELD_STATUS = '1'
+		   AND T.FIELD_ID IN
+		 <foreach collection="selectFieldList" item="id" open="(" close=")" separator=",">
+		 	#{id}
+		 </foreach>
+		ORDER BY T.DISPLAY_ORDER
+	</insert>
+	<!-- 根据rptId查询报表信息 -->
+	<select id="qryReportInfoByIdDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT T.RPT_ID, 
+					   T.RPT_NAME, 
+					   T.RPT_DESC, 
+					   DECODE(T.RPT_STATUS, '1', '有效', '0', '失效') RPT_STATUS,
+					   T.CREATER_NAME,
+					   TO_CHAR(T.CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') CREATE_DATE,
+				       TO_CHAR(NVL(T.UPDATE_DATE, T.CREATE_DATE), 'YYYY-MM-DD HH24:MI:SS') UPDATE_DATE,
+				       T.RPT_TYPE,
+					   T.IF_DOWNLOAD,
+					   T.RPT_CYCLE,
+					   S.TB_ID,
+					   S.TB_NAME,
+					   S.TB_OWNER,
+					   S.TB_CODE,
+					   S.SPLIT_FLAG,
+					   S.SPLIT_CODE
+				  FROM RPT_REPORT_INFO T, RPT_TABLE_INFO S
+				 WHERE T.TB_ID = S.TB_ID(+)
+				   AND T.RPT_ID = #{rptId}
+				   AND T.RPT_STATUS = '1'
+				 ORDER BY T.RPT_ID) T) T
+	</select>
+	<!-- 根据rptId查询报表信息-查询条件控件信息 -->
+	<select id="qryRptCdtInfoListDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.RPT_ID,
+		       T.FIELD_CODE CDT_CODE,
+		       T.FILED_NAME CDT_NAME,
+		       T.CDT_ORDER,
+		       T.CDT_ID,
+		       T.CDT_SHOW_TYPE,
+		       A.CODE_NAME CDT_SHOW_DESC,
+		       S.CDT_SQL,
+		       S.PAT_CDT_ID,
+		       S.PAT_COL_CODE,
+		       T.CDT_CAL_TYPE,
+		       B.CODE_NAME CDT_CAL_DESC,
+		       T.DEFAULT_VAL,
+		       CASE WHEN S.PAT_CDT_ID = '0' THEN '1' ELSE '0' END IF_PAT
+		  FROM RPT_REPORT_CONDITION T, RPT_CONDITION_INFO S, RPT_SYS_CODE A, RPT_SYS_CODE B
+		 WHERE T.RPT_ID = #{rptId}
+		   AND T.CDT_ID = S.CDT_ID
+		   AND S.CDT_STATUS = '1'
+		   AND T.CDT_SHOW_TYPE = A.CODE_ID
+		   AND A.CODE_TYPE_ID = 'CDT_SHOW_TYPE'
+		   AND T.CDT_CAL_TYPE = B.CODE_ID
+		   AND B.CODE_TYPE_ID = 'CDT_CAL_TYPE'
+		 ORDER BY T.RPT_ID, T.CDT_ORDER
+	</select>
+	<!-- 根据rptId查询报表信息-字段信息 -->
+	<select id="qryRptFieldListDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.RPT_ID,
+		       T.FIELD_ID,
+		       T.FIELD_CODE,
+		       T.FIELD_NAME,
+		       S.FIELD_TYPE,
+		       S.FIELD_LENGTH,
+		       T.DISPLAY_ORDER,
+		       T.IS_FIXED,
+		       T.IS_DIM,
+		       T.IS_ORDER_COL,
+		       T.IS_SHOW,
+		       T.GROUP_VALUE,
+		       A.TB_OWNER,
+		       A.TB_CODE
+		  FROM RPT_REPORT_FIELD T, RPT_TABLE_FIELD S, RPT_TABLE_INFO A
+		 WHERE T.RPT_ID = #{rptId}
+		   AND T.FIELD_ID = S.FIELD_ID
+		   AND S.TB_ID = A.TB_ID
+		   AND A.TB_STATUS = '1'
+		   AND S.FIELD_STATUS = '1'
+		 <if test="rptFieldIdArray != null and rptFieldIdArray.length != 0">
+		   AND T.FIELD_ID IN 
+		 	<foreach collection="rptFieldIdArray" item="rptFieldId" open="(" separator="," close=")">
+		 		#{rptFieldId}
+		 	</foreach>
+		 </if>
+		 ORDER BY T.RPT_ID, T.DISPLAY_ORDER
+	</select>
+	<!-- 根据rptId修改报表状态-失效-启用 -->
+	<update id="updateReportInfoByIdDao" parameterType="map">
+		UPDATE RPT_REPORT_INFO T SET T.RPT_STATUS = #{rptStatus}, T.UPDATE_DATE = SYSDATE WHERE T.RPT_ID = #{rptId}
+	</update>
+	<!-- 根据rptId删除报表信息-删除 -->
+	<update id="deleteReportInfoByIdDao" parameterType="map">
+		DELETE FROM RPT_REPORT_INFO T WHERE T.RPT_ID = #{rptId}
+	</update>
+	<!-- 根据rptId删除报表查询条件配置 -->
+	<delete id="deleteReportConditionByIdDao" parameterType="map">
+		DELETE FROM RPT_REPORT_CONDITION T WHERE T.RPT_ID = #{rptId}
+	</delete>
+	<!-- 根据rptId删除报表字段配置 -->
+	<delete id="deleteReportFieldByIdDao" parameterType="map">
+		DELETE FROM RPT_REPORT_FIELD T WHERE T.RPT_ID = #{rptId}
+	</delete>
+	<!-- 根据构建查询的要素查询报表数据记录 -->
+	<select id="qryReportDataListDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT ${selectFieldList}
+				  FROM ${tableName} T
+				 WHERE 1=1
+				 <foreach collection="whereSqlList" index="index" item="whereSql">
+				   AND ${whereSql}
+				 </foreach>
+				 <if test="groupByFieldList != null and groupByFieldList != ''">
+				 	GROUP BY ${groupByFieldList}
+				 </if>
+				 <if test="orderByFieldList != null and orderByFieldList != ''">
+				 	ORDER BY ${orderByFieldList}
+				 </if>
+				 ) T) T
+		 WHERE T.RN <![CDATA[>=]]> #{startIndex}
+		   AND T.RN <![CDATA[<=]]> #{endIndex}
+	</select>
+	<!-- 根据构建查询的要素查询报表数据记录数 -->
+	<select id="qryReportDataCountDao" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			SELECT ${selectFieldList}
+			  FROM ${tableName} T
+			 WHERE 1=1
+			 <foreach collection="whereSqlList" index="index" item="whereSql">
+			   AND ${whereSql}
+			 </foreach>
+			 <if test="groupByFieldList != null and groupByFieldList != ''">
+			 	GROUP BY ${groupByFieldList}
+			 </if>
+			 <if test="orderByFieldList != null and orderByFieldList != ''">
+			 	ORDER BY ${orderByFieldList}
+			 </if> ) T
+	</select>
+	<!-- 存储模板信息 -->
+	<insert id="insertModelInfoDao" parameterType="map">
+		INSERT INTO RPT_MODEL_INFO
+		(
+		    MODEL_ID,
+		    MODEL_NAME,
+		    MODEL_PATH,
+		    CREATE_DATE,
+		    CREATER_NAME,
+		    MODEL_CSS,
+		    MODEL_HTML
+		)VALUES
+		(
+		    #{modelId},
+		    #{modelName},
+		    #{modelPath},
+		    SYSDATE,
+		    #{createrName},
+		    #{modelCss, jdbcType=CLOB},
+		    #{modelHtml, jdbcType=CLOB}
+		)
+	</insert>
+	<!-- 把sql变量信息插入到数据库 -->
+	<insert id="insertModelSqlDao" parameterType="map">
+		<foreach collection="varList" item="var" index="index" open="BEGIN" close=";END;" separator=";">
+			INSERT INTO RPT_MODEL_SQL
+			(
+			    MODEL_ID, 
+			    VAR_ID, 
+			    VAR_CODE, 
+			    VAR_SQL, 
+			    ORDER_ID, 
+			    ROWINDEX, 
+			    COLINDEX
+			)VALUES
+			(
+			    #{modelId},
+			    #{modelId}||#{index},
+			    #{var.varCode},
+			    NULL,
+			    #{index},
+			    #{var.rowIndex},
+			    #{var.colIndex}
+			)
+		</foreach>
+	</insert>
+	<!-- 更新模板的sql -->
+	<update id="updateModelSqlDao" parameterType="list">
+		<foreach collection="varSqlList" item="varSqlMap" index="index" open="BEGIN" close=";END;" separator=";">
+			UPDATE RPT_MODEL_SQL T
+			   SET T.VAR_SQL = #{varSqlMap.varSql}
+			 WHERE T.MODEL_ID = #{modelId}
+			   AND T.VAR_ID = #{varSqlMap.varId}
+		</foreach>
+	</update>
+	<!-- 删除报表与模板的对应关系 -->
+	<update id="deleteReportModelDao" parameterType="map">
+		UPDATE RPT_REPORT_MODEL T
+		   SET T.STATUS = '0'
+		 WHERE T.RPT_ID = #{rptId}
+	</update>
+	<!-- 更新模板是否可翻页 -->
+	<update id="updateModelInfoDao" parameterType="map">
+		UPDATE RPT_MODEL_INFO T
+		   SET T.IF_PAGE = #{ifPage}
+		 WHERE T.MODEL_ID = #{modelId}
+	</update>
+	<!-- 保存报表与模板的对应关系 -->
+	<insert id="insertReportModelDao" parameterType="map">
+		INSERT INTO RPT_REPORT_MODEL
+		(
+		    RPT_ID, 
+		    MODEL_ID, 
+		    STATUS
+		)VALUES
+		(
+		    #{rptId},
+		    #{modelId},
+		    '1'
+		)
+	</insert>
+	<!-- 查询报表模板信息 -->
+	<select id="qryRptModelInfoDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.RPT_ID,
+		       S.MODEL_ID,
+		       S.MODEL_NAME,
+		       S.MODEL_PATH,
+		       S.CREATE_DATE,
+		       S.CREATER_NAME,
+		       S.IF_PAGE
+		  FROM RPT_REPORT_MODEL T, RPT_MODEL_INFO S
+		 WHERE T.MODEL_ID = S.MODEL_ID
+		   AND T.RPT_ID = #{rptId}
+		   AND T.STATUS = '1'
+	</select>
+	<!-- 查询模板对应的变量列表信息 -->
+	<select id="qryVarListDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.RPT_ID,
+		       S.MODEL_ID,
+		       S.VAR_ID,
+		       S.VAR_CODE,
+		       S.VAR_SQL,
+		       S.ORDER_ID,
+		       S.ROWINDEX,
+		       S.COLINDEX
+		  FROM RPT_REPORT_MODEL T, RPT_MODEL_SQL S
+		 WHERE T.RPT_ID = #{rptId}
+		   AND T.STATUS = '1'
+		   AND T.MODEL_ID = S.MODEL_ID
+		 ORDER BY S.ORDER_ID
+	</select>
+	<!-- 报表模板对应的实体类 -->
+	<resultMap type="com.aiutil.report.entities.ReportModel" id="reportModel">
+		<result property="rptId" column="RPT_ID"/>
+		<result property="modelId" column="MODEL_ID"/>
+		<result property="modelName" column="MODEL_NAME"/>
+		<result property="modelPath" column="MODEL_PATH"/>
+		<result property="createrName" column="CREATER_NAME"/>
+		<result property="ifPage" column="IF_PAGE"/>
+		<result property="modelCss" column="MODEL_CSS" jdbcType="CLOB" javaType="java.lang.String"/>
+		<result property="modelHtml" column="MODEL_HTML" jdbcType="CLOB" javaType="java.lang.String"/>
+	</resultMap>
+	<!-- 查询的报表的模板代码 -->
+	<select id="qryReportModelDao" parameterType="map" resultMap="reportModel">
+		SELECT T.RPT_ID,
+		       T.MODEL_ID,
+		       S.MODEL_NAME,
+		       S.MODEL_PATH,
+		       S.CREATER_NAME,
+		       S.IF_PAGE,
+		       S.MODEL_CSS,
+		       S.MODEL_HTML
+		  FROM RPT_REPORT_MODEL T, RPT_MODEL_INFO S
+		 WHERE T.RPT_ID = #{rptId}
+		   AND T.MODEL_ID = S.MODEL_ID
+		   AND T.STATUS = '1'
+	</select>
+	<!-- 查询每个变量对应的数据 -->
+	<select id="qryDataBySqlDao" parameterType="map" resultType="java.util.LinkedHashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				${sql}
+				 ) T) T
+		<if test="ifPage == '1'.toString()">
+		 WHERE T.RN <![CDATA[>=]]> #{startIndex}
+		   AND T.RN <![CDATA[<=]]> #{endIndex}
+		</if>
+	</select>
+	<!-- 查询每个变量对应的数据量 -->
+	<select id="qryDataBySqlCountDao" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			${sql}
+			 ) T
+	</select>
+	<!-- 插入下载记录信息 -->
+	<insert id="insertDownloadInfoDao" parameterType="map">
+		INSERT INTO RPT_DOWNLOAD_INFO
+		(   ID,
+		    RPT_ID,
+		    RPT_NAME,
+		    CREATE_DATE,
+		    FILE_PATH,
+		    FILE_STATUS,
+		    CREATER_NAME,
+		    CDT_DESC
+		)VALUES(
+		    #{id},
+		    #{rptId},
+		    #{rptName},
+		    SYSDATE,
+		    #{filePath},
+		    #{fileStatus},
+		    #{createrName},
+		    #{cdtDesc}
+		)
+	</insert>
+	<!-- 查询下载清单 -->
+	<select id="qryDownloadInfoListDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT ID,
+				       RPT_ID,
+				       RPT_NAME,
+				       TO_CHAR(CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') CREATE_DATE,
+				       FILE_PATH,
+				       decode(FILE_STATUS, '1', '下载完成', '2', '已查看') FILE_STATUS,
+				       CREATER_NAME,
+				       CDT_DESC
+				  FROM RPT_DOWNLOAD_INFO T
+				 WHERE 1=1
+				 <if test="rptName!=null and rptName!=''">
+				   AND T.RPT_NAME LIKE '%${rptName}%'
+				 </if>
+				 <if test="createrName!=null and createrName!=''">
+				   AND T.CREATER_NAME LIKE '%{createrName}%'
+				 </if>
+				 ORDER BY T.CREATE_DATE DESC
+				 ) T) T
+		 WHERE T.RN <![CDATA[>=]]> #{startIndex}
+		   AND T.RN <![CDATA[<=]]> #{endIndex}
+	</select>
+	<!-- 根据构建查询的要素查询报表数据记录数 -->
+	<select id="qryDownloadInfoCountDao" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			SELECT ID,
+			       RPT_ID,
+			       RPT_NAME,
+			       CREATE_DATE,
+			       FILE_PATH,
+			       FILE_STATUS,
+			       CREATER_NAME,
+			       CDT_DESC
+			  FROM RPT_DOWNLOAD_INFO T
+			 WHERE 1=1
+			 <if test="rptName!=null and rptName!=''">
+			   AND T.RPT_NAME LIKE '%${rptName}%'
+			 </if>
+			 <if test="createrName!=null and createrName!=''">
+			   AND T.CREATER_NAME LIKE '%${createrName}%'
+			 </if> ) T
+	</select>
+</mapper>

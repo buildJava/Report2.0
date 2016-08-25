@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiutil.report.daos.ReportConfigDao">
+
+	<!-- 查询数据库用户列表-->
+	<select id="qryRptDbUsersDao" resultType="java.util.HashMap">
+		SELECT T.USER_ID, T.USERNAME, T.USER_CODE FROM RPT_DB_USERS T ORDER BY T.USER_ID
+	</select>
+	<!-- 查询分表变量列表 -->
+	<select id="qrySplitCodeDao" resultType="java.util.HashMap">
+		SELECT T.VAR_ID, T.VAR_CODE, T.VAR_VALUE, T.VAR_DESC FROM RPT_SYS_VAR T ORDER BY T.VAR_ID
+	</select>
+	<!-- 根据元数据ID查询元数据 -->
+	<select id="qryTableInfoByIdDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.TB_ID,
+		       T.TB_NAME,
+		       T.TB_DESC,
+		       T.TB_OWNER,
+		       T.TB_CODE,
+		       DECODE(T.SPLIT_FLAG, '1', '是', '0', '否') SPLIT_FLAG,
+		       NVL(T.SPLIT_CODE, '—') SPLIT_CODE,
+		       T.TB_STATUS,
+		       NVL(T.CREATER_NAME, 'admin') CREATER_NAME,
+		       TO_CHAR(T.CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') CREATE_DATE,
+		       TO_CHAR(NVL(T.UPDATE_DATE, T.CREATE_DATE), 'YYYY-MM-DD HH24:MI:SS') UPDATE_DATE
+		  FROM RPT_TABLE_INFO T
+		 WHERE T.TB_ID = #{tbId}
+	</select>
+	<!-- 查询报表配置信息 -->
+	<select id="qryReportInfoDao" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT T.RPT_ID, 
+					   T.RPT_NAME, 
+					   T.RPT_DESC, 
+					   DECODE(T.RPT_STATUS, '1', '是', '0', '否') RPT_STATUS,
+					   T.CREATER_NAME,
+					   TO_CHAR(T.CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') CREATE_DATE,
+				       TO_CHAR(NVL(T.UPDATE_DATE, T.CREATE_DATE), 'YYYY-MM-DD HH24:MI:SS') UPDATE_DATE
+				  FROM RPT_REPORT_INFO T
+				 ORDER BY T.RPT_ID) T) T
+	</select>
+	<!-- 查询报表查询控件配置信息 -->
+	<select id="qryCdtInfoDao" resultType="java.util.HashMap">
+		SELECT T.* FROM (
+			SELECT T.*, ROWNUM RN FROM (
+				SELECT T.CDT_ID,
+					   T.CDT_CODE,
+				       T.CDT_NAME,
+				       T.CDT_DESC,
+				       T.CDT_SHOW_TYPE,
+       				   A.CODE_NAME CDT_SHOW_DESC,
+				       T.CDT_SQL,
+				       T.CDT_CAL_TYPE,
+				       B.CODE_NAME CDT_CAL_DESC,
+				       T.PAT_CDT_ID,
+				       NVL(S.CDT_CODE, '—') PAT_CDT_CODE,
+				       NVL(S.CDT_NAME, '—') PAT_CDT_NAME,
+				       S.CDT_DESC      PAT_CDT_DESC,
+				       S.CDT_SHOW_TYPE PAT_CDT_SHOW_TYPE,
+				       S.CDT_SQL       PAT_CDT_SQL,
+				       S.CDT_CAL_TYPE  PAT_CDT_CAL_TYPE,
+				       T.PAT_COL_CODE
+				  FROM RPT_CONDITION_INFO T, RPT_CONDITION_INFO S, RPT_SYS_CODE A, RPT_SYS_CODE B
+				 WHERE T.CDT_SHOW_TYPE = A.CODE_ID
+				   AND T.PAT_CDT_ID = S.CDT_ID(+)
+				   AND A.CODE_TYPE_ID = 'CDT_SHOW_TYPE'
+				   AND T.CDT_STATUS = '1'
+				   AND S.CDT_STATUS(+) = '1'
+				   AND T.CDT_CAL_TYPE = B.CODE_ID
+				   AND B.CODE_TYPE_ID = 'CDT_CAL_TYPE'
+				 ORDER BY T.CDT_ID) T) T
+	</select>
+	<!-- 查询维值 -->
+	<select id="qrySysCodeDao" parameterType="map" resultType="java.util.HashMap">
+		SELECT T.CODE_ID, T.CODE_NAME
+		  FROM RPT_SYS_CODE T
+		 WHERE T.CODE_TYPE_ID = #{codeTypeId}
+		 ORDER BY T.CODE_ORDER
+	</select>
+</mapper>
